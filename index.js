@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config()
 const app = express()
 const admin = require("firebase-admin");
+const stripe = require('stripe')(process.env.STRIPE_KEY);
 const port = process.env.PORT || 3000
 
 app.use(express.json());
@@ -25,7 +26,6 @@ const verifyFBToken = async (req, res, next) => {
   try {
     const idToken = token.split(' ')[1];
     const decoded = await admin.auth().verifyIdToken(idToken);
-    console.log('decoded in the token', decoded);
     req.decoded_email = decoded.email;
     next();
   }
@@ -140,6 +140,75 @@ async function run() {
       const result = await managerCollection.insertOne(managers);
       res.send(result);
     })
+    // Stripe Api 
+    app.post('/create-checkout-session', async (req, res) => {
+      const paymentInfo = req.body;
+
+      const amount = parseInt(paymentInfo.money) * 100;
+
+      try {
+        const session = await stripe.checkout.sessions.create({
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
+                unit_amount: amount,
+                product_data: {
+                  name: paymentInfo.ClubName,
+                },
+              },
+              quantity: 1,
+            },
+          ],
+          customer_email: paymentInfo.userEmail,
+          mode: "payment",
+          metadata: {
+            clubId: paymentInfo.clubId,
+            clubName: paymentInfo.ClubName,
+            userEmail: paymentInfo.userEmail,
+            managerEmail: paymentInfo.managerEmail,
+            location: paymentInfo.location,
+            membershipFee: paymentInfo.membershipFee,
+            status: paymentInfo.status,
+            category:paymentInfo.category
+
+          },
+          success_url: `${process.env.YOUR_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.YOUR_DOMAIN}/dashboard/payment-cancel`,
+        });
+
+        res.send({ url: session.url });
+      } catch (err) {
+        console.log(err);
+        res.status(500).send({ message: "Stripe session error", error: err });
+      }
+    });
+    // verify api 
+    app.post("/verify-payment", async (req, res) => {
+      const { sessionId } = req.body;
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.payment_status === "paid") {
+        return res.send({
+          paymentStatus: "paid",
+          joinInfo: {
+            clubId: session.metadata.clubId,
+            clubName: session.metadata.clubName,
+            category:session.metadata.category,
+            userEmail: session.metadata.userEmail,
+            managerEmail: session.metadata.managerEmail,
+            location: session.metadata.location,
+            membershipFee: session.metadata.membershipFee,
+            status: session.metadata.status,
+            createdAt: new Date()
+          }
+        });
+      }
+
+      return res.send({ paymentStatus: "cancelled" });
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
