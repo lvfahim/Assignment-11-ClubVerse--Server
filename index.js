@@ -237,16 +237,6 @@ async function run() {
         }
       }
       const result = await managerCollection.updateOne(query, upDataDoc)
-      if (status === 'approve') {
-        const email = req.body.email;
-        const userQuery = { email: email };
-
-        const updateUser = {
-          $set: { role: 'manager' }
-        };
-
-        await userCollection.updateOne(userQuery, updateUser);
-      }
       res.send(result)
     })
     // Stripe Api 
