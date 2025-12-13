@@ -56,6 +56,19 @@ async function run() {
     const joinCollection = db.collection('joinMember')
     const PaymentClubCollection = db.collection('paymentClub')
     // Send a ping to confirm a successful connection
+    // middle admin before allowing admin activity
+    // must be used after verifyFBToken middleware
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await userCollection.findOne(query);
+
+      if (!user || user.role !== 'admin') {
+        return res.status(403).send({ message: 'forbidden access' });
+      }
+
+      next();
+    }
     // user Api 
     app.post('/users', async (req, res) => {
       const user = req.body;
@@ -80,7 +93,7 @@ async function run() {
       const user = await userCollection.findOne(query);
       res.send({ role: user?.role || 'user' })
     })
-    app.patch('/users/:id', verifyFBToken, async (req, res) => {
+    app.patch('/users/:id/role', verifyFBToken,verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const roleInfo = req.body;
       const query = { _id: new ObjectId(id) }
