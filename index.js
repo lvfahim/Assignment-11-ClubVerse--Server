@@ -69,6 +69,9 @@ async function run() {
       const result = await userCollection.insertOne(user);
       res.send(result);
     })
+    // app.patch('/users/:id',async(req,res)=>{
+    //   const id = re
+    // })
     // club Api 
     app.get('/clubs', async (req, res) => {
       const sort = { membershipFee: -1 }
@@ -83,6 +86,27 @@ async function run() {
       res.send(result)
     })
 
+    app.get('/statusClub', async (req, res) => {
+      const query = {};
+      if (req.query.status) {
+        query.status = req.query.status
+      }
+      const cursor = managerCollection.find(query)
+      const result = await cursor.toArray()
+      res.send(result)
+    })
+    app.patch('/clubs/:id', verifyFBToken, async (req, res) => {
+      const id = req.params.id;
+      const upDateClub = req.body;
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: {
+          status: upDateClub.status
+        }
+      };
+      const result = await managerCollection.updateOne(query, update);
+      res.send(result);
+    });
     app.get('/clubs/:id', async (req, res) => {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
@@ -94,13 +118,12 @@ async function run() {
       const joinMember = req.body;
       joinMember.createdAt = new Date();
       const { clubId, userEmail } = joinMember;
-      // Validate required fields
+
       if (!clubId || !userEmail) {
         return res.status(400).send({
           message: "clubId and userEmail are required."
         });
       }
-      // Step 1: Check if user already joined this club
       const alreadyJoined = await joinCollection.findOne({
         clubId: clubId,
         userEmail: userEmail
@@ -132,33 +155,33 @@ async function run() {
       const result = await joinCollection.find(query).sort({ membershipFee: -1 }).toArray();
       res.send(result);
     });
-    
+
     // club created Api 
-    app.get('/joinCreatedClub',verifyFBToken,async(req,res)=>{
-      const email = req.query.email 
+    app.get('/joinCreatedClub', verifyFBToken, async (req, res) => {
+      const email = req.query.email
       const query = {};
-      if(email){
-        if(email !== req.decoded_email){
-          return res.status(403).send({message: 'forbidden access'});
+      if (email) {
+        if (email !== req.decoded_email) {
+          return res.status(403).send({ message: 'forbidden access' });
         }
         query.managerEmail = email;
       }
-      const result = await managerCollection.find(query).sort({createdAt:-1}).toArray()
+      const result = await managerCollection.find(query).sort({ createdAt: -1 }).toArray()
       res.send(result)
     })
 
-    app.patch('/joinCreatedClub/:id',verifyFBToken,async(req,res)=>{
+    app.patch('/joinCreatedClub/:id', verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const upDateClub = req.body;
-      const query = {_id : new ObjectId(id)}
+      const query = { _id: new ObjectId(id) }
       const update = {
-        $set : {
-          clubName:upDateClub.clubName,
-          category:upDateClub.category,
-          membershipFee:upDateClub.membershipFee
+        $set: {
+          clubName: upDateClub.clubName,
+          category: upDateClub.category,
+          membershipFee: upDateClub.membershipFee
         }
       }
-      const result = await managerCollection.updateOne(query,update);
+      const result = await managerCollection.updateOne(query, update);
       res.send(result)
     })
 
@@ -170,6 +193,28 @@ async function run() {
 
       const result = await managerCollection.insertOne(managers);
       res.send(result);
+    })
+    app.patch('/manager/:id', verifyFBToken, async (req, res) => {
+      const status = req.body.status;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const upDataDoc = {
+        $set: {
+          status: status
+        }
+      }
+      const result = await managerCollection.updateOne(query, upDataDoc)
+      if (status === 'approve') {
+        const email = req.body.email;
+        const userQuery = { email: email };
+
+        const updateUser = {
+          $set: { role: 'manager' }
+        };
+
+        await userCollection.updateOne(userQuery, updateUser);
+      }
+      res.send(result)
     })
     // Stripe Api 
     app.post('/create-checkout-session', async (req, res) => {
@@ -250,9 +295,6 @@ async function run() {
 
           // Save the payment data to the main collection
           const resultPayment = await PaymentClubCollection.insertOne(paymentDoc);
-
-          // Save the payment data to another collection as well
-          const resultOther = await OtherPaymentCollection.insertOne(paymentDoc);
 
           return res.send({
             success: true,
