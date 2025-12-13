@@ -113,7 +113,6 @@ async function run() {
       res.send(result)
     })
     app.get('/someClubs', async (req, res) => {
-      // const sort = { createdAt : -1 }
       const cursor = managerCollection.find().limit(8)
       const result = await cursor.toArray()
       res.send(result)
@@ -124,7 +123,8 @@ async function run() {
       if (req.query.status) {
         query.status = req.query.status
       }
-      const cursor = managerCollection.find(query)
+      const sort = { createdAt : -1 }
+      const cursor = managerCollection.find(query).sort(sort)
       const result = await cursor.toArray()
       res.send(result)
     })
