@@ -93,7 +93,7 @@ async function run() {
       const user = await userCollection.findOne(query);
       res.send({ role: user?.role || 'user' })
     })
-    app.patch('/users/:id/role', verifyFBToken,verifyAdmin, async (req, res) => {
+    app.patch('/users/:id/role', verifyFBToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const roleInfo = req.body;
       const query = { _id: new ObjectId(id) }
@@ -123,7 +123,7 @@ async function run() {
       if (req.query.status) {
         query.status = req.query.status
       }
-      const sort = { createdAt : -1 }
+      const sort = { createdAt: -1 }
       const cursor = managerCollection.find(query).sort(sort)
       const result = await cursor.toArray()
       res.send(result)
@@ -282,71 +282,43 @@ async function run() {
         res.status(500).send({ message: "Stripe session error", error: err });
       }
     });
-    app.patch('/payment-success', async (req, res) => {
+    app.post("/verify-payment", async (req, res) => {
       try {
-        const sessionId = req.query.session_id;
-        console.log(sessionId)
-        // Retrieve session details from Stripe
+        const { sessionId } = req.body;
+
+        // 1️⃣ Stripe session verify
         const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        if (session.payment_status !== "paid") {
+          return res.send({ paymentStatus: "cancelled" });
+        }
+
         const transactionId = session.payment_intent;
 
-        // Check if this payment already exists
-        const query = { transactionId: transactionId };
-        const paymentExist = await PaymentClubCollection.findOne(query);
-
-        if (paymentExist) {
+        // 2️⃣ Duplicate payment check
+        const alreadyPaid = await PaymentClubCollection.findOne({ transactionId });
+        if (alreadyPaid) {
           return res.send({
-            message: 'Payment already exists',
-            transactionId,
-            success: true,
-            already: true
+            paymentStatus: "paid",
+            alreadyPaid: true
           });
         }
 
-        // Payment successful
-        if (session.payment_status === 'paid') {
-
-          const paymentDoc = {
-            amount: session.amount_total / 100,
-            currency: session.currency,
-            customerEmail: session.customer_details.email,
-            clubId: session.metadata.clubId,
-            clubName: session.metadata.clubName,
-            transactionId: session.payment_intent,
-            paidAt: new Date(),
-          };
-
-          // Save the payment data to the main collection
-          const resultPayment = await PaymentClubCollection.insertOne(paymentDoc);
-
-          return res.send({
-            success: true,
-            paymentInfo: resultPayment,
-            otherPaymentInfo: resultOther,
-            transactionId: transactionId
-          });
-        }
-
-        return res.send({ success: false, message: "Payment not completed" });
-
-      } catch (error) {
-        console.error("Payment verify error:", error);
-        res.status(500).send({
-          success: false,
-          message: "Server error occurred",
-          error: error.message
+        // 3️⃣ Save payment
+        await PaymentClubCollection.insertOne({
+          transactionId,
+          amount: session.amount_total / 100,
+          currency: session.currency,
+          customerEmail: session.customer_details.email,
+          clubId: session.metadata.clubId,
+          clubName: session.metadata.clubName,
+          paidAt: new Date(),
         });
-      }
-    });
-    // verify api 
-    app.post("/verify-payment", async (req, res) => {
-      const { sessionId } = req.body;
 
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-      if (session.payment_status === "paid") {
-        return res.send({
+        // 4️⃣ Send join info
+        res.send({
           paymentStatus: "paid",
+          alreadyPaid: false,
           joinInfo: {
             clubId: session.metadata.clubId,
             clubName: session.metadata.clubName,
@@ -355,13 +327,30 @@ async function run() {
             managerEmail: session.metadata.managerEmail,
             location: session.metadata.location,
             membershipFee: session.metadata.membershipFee,
-            status: session.metadata.status,
+            status: "active",
             createdAt: new Date()
           }
         });
+
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ paymentStatus: "error" });
+      }
+    });
+    app.post("/joinMember", async (req, res) => {
+      const joinInfo = req.body;
+
+      const exists = await joinClubCollection.findOne({
+        clubId: joinInfo.clubId,
+        userEmail: joinInfo.userEmail
+      });
+
+      if (exists) {
+        return res.send({ message: "Already joined" });
       }
 
-      return res.send({ paymentStatus: "cancelled" });
+      const result = await joinClubCollection.insertOne(joinInfo);
+      res.send(result);
     });
 
     await client.db("admin").command({ ping: 1 });
