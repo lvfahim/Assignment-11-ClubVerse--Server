@@ -255,6 +255,12 @@ async function run() {
       res.send(result)
     })
 
+    app.get('/event', async (req, res) => {
+      const sort = { eventDate: 1 }
+      const curser = eventClubCollection.find().sort(sort);
+      const result = await curser.toArray();
+      res.send(result)
+    })
     // manager Api 
     app.post('/manager', async (req, res) => {
       const managers = req.body;
