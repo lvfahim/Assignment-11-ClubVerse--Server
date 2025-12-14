@@ -54,8 +54,10 @@ async function run() {
     const userCollection = db.collection('users')
     const managerCollection = db.collection('manager')
     const joinCollection = db.collection('joinMember')
+    const joinEventCollection = db.collection('joinEvent')
     const eventClubCollection = db.collection('eventClub')
     const PaymentClubCollection = db.collection('paymentClub')
+    const PaymentEventCollection = db.collection('paymentEvent')
     // Send a ping to confirm a successful connection
     // middle admin before allowing admin activity
     // must be used after verifyFBToken middleware
@@ -241,7 +243,24 @@ async function run() {
       const result = await eventClubCollection.insertOne(event)
       res.send(result)
     })
-
+    app.get('/event/:id', async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) }
+      const result = await eventClubCollection.findOne(query)
+      res.send(result)
+    })
+    app.get('/joinPaymentEvent', verifyFBToken, async (req, res) => {
+      const email = req.query.email
+      const query = {};
+      if (email) {
+        if (email !== req.decoded_email) {
+          return res.status(403).send({ message: 'forbidden access' });
+        }
+        query.customerEmail = email;
+      }
+      const result = await PaymentEventCollection.find(query).sort({ createdAt: -1 }).toArray()
+      res.send(result)
+    })
     app.get('/myCreatEvent', verifyFBToken, async (req, res) => {
       const email = req.query.email
       const query = {};
@@ -261,6 +280,30 @@ async function run() {
       const result = await curser.toArray();
       res.send(result)
     })
+    app.post('/joinEvent', async (req, res) => {
+      const joinMember = req.body;
+      joinMember.createdAt = new Date();
+      const { clubId, userEmail } = joinMember;
+
+      if (!clubId || !userEmail) {
+        return res.status(400).send({
+          message: "clubId and userEmail are required."
+        });
+      }
+      const alreadyJoined = await joinCollection.findOne({
+        eventId: eventId,
+        userEmail: userEmail
+      });
+      if (alreadyJoined) {
+        return res.status(409).send({
+          message: "User already joined this club",
+          joined: true
+        });
+      }
+      // Step 2: Insert new join
+      const result = await joinEventCollection.insertOne(joinMember);
+      res.send(result);
+    });
     // manager Api 
     app.post('/manager', async (req, res) => {
       const managers = req.body;
@@ -282,7 +325,7 @@ async function run() {
       const result = await managerCollection.updateOne(query, upDataDoc)
       res.send(result)
     })
-    // Stripe Api 
+    // Stripe Api   // Payment for Club 
     app.post('/create-checkout-session', async (req, res) => {
       const paymentInfo = req.body;
 
@@ -325,18 +368,14 @@ async function run() {
         res.status(500).send({ message: "Stripe session error", error: err });
       }
     });
+
     app.patch('/payment-success', async (req, res) => {
       try {
         const sessionId = req.query.session_id;
-        console.log(sessionId)
-        // Retrieve session details from Stripe
         const session = await stripe.checkout.sessions.retrieve(sessionId);
         const transactionId = session.payment_intent;
-
-        // Check if this payment already exists
         const query = { transactionId: transactionId };
         const paymentExist = await PaymentClubCollection.findOne(query);
-
         if (paymentExist) {
           return res.send({
             message: 'Payment already exists',
@@ -345,8 +384,6 @@ async function run() {
             already: true
           });
         }
-
-        // Payment successful
         if (session.payment_status === 'paid') {
 
           const paymentDoc = {
@@ -359,10 +396,8 @@ async function run() {
             transactionId: session.payment_intent,
             paidAt: new Date(),
           };
-
           // Save the payment data to the main collection
           const resultPayment = await PaymentClubCollection.insertOne(paymentDoc);
-
           return res.send({
             success: true,
             paymentInfo: resultPayment,
@@ -408,6 +443,119 @@ async function run() {
       return res.send({ paymentStatus: "cancelled" });
     });
 
+    // Payment for Event 
+    app.post('/create-checkout-session-event', async (req, res) => {
+      const paymentInfo = req.body;
+
+      const amount = parseInt(paymentInfo.money) * 100;
+
+      try {
+        const session = await stripe.checkout.sessions.create({
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
+                unit_amount: amount,
+                product_data: {
+                  name: paymentInfo.EventName,
+                },
+              },
+              quantity: 1,
+            },
+          ],
+          customer_email: paymentInfo.userEmail,
+          mode: "payment",
+          metadata: {
+            eventId: paymentInfo.eventId,
+            EventName: paymentInfo.EventName,
+            userEmail: paymentInfo.userEmail,
+            managerEmail: paymentInfo.managerEmail,
+            location: paymentInfo.location,
+            eventFee: paymentInfo.eventFee,
+            status: paymentInfo.status,
+            clubName: paymentInfo.clubName
+
+          },
+          success_url: `${process.env.YOUR_DOMAIN}/dashboard/payment-success-event?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.YOUR_DOMAIN}/dashboard/payment-cancel-event`,
+        });
+        res.send({ url: session.url });
+      } catch (err) {
+        console.log(err);
+        res.status(500).send({ message: "Stripe session error", error: err });
+      }
+    });
+    app.patch('/payment-success-event', async (req, res) => {
+      try {
+        const sessionId = req.query.session_id;
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        const transactionId = session.payment_intent;
+        const query = { transactionId: transactionId };
+        const paymentExist = await PaymentEventCollection.findOne(query);
+        if (paymentExist) {
+          return res.send({
+            message: 'Payment already exists',
+            transactionId,
+            success: true,
+            already: true
+          });
+        }
+        if (session.payment_status === 'paid') {
+
+          const paymentDoc = {
+            amount: session.amount_total / 100,
+            currency: session.currency,
+            customerEmail: session.customer_details.email,
+            eventId: session.metadata.eventId,
+            clubName: session.metadata.clubName,
+            EventName: session.metadata.EventName,
+            transactionId: session.payment_intent,
+            paidAt: new Date(),
+          };
+          // Save the payment data to the main collection
+          const resultPayment = await PaymentEventCollection.insertOne(paymentDoc);
+          return res.send({
+            success: true,
+            paymentInfo: resultPayment,
+            transactionId: transactionId
+          });
+        }
+
+        return res.send({ success: false, message: "Payment not completed" });
+
+      } catch (error) {
+        console.error("Payment verify error:", error);
+        res.status(500).send({
+          success: false,
+          message: "Server error occurred",
+          error: error.message
+        });
+      }
+    });
+    // app.post("/verify-payment-event", async (req, res) => {
+    //   const { sessionId } = req.body;
+
+    //   const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    //   if (session.payment_status === "paid") {
+    //     return res.send({
+    //       paymentStatus: "paid",
+    //       joinInfo: {
+    //         eventId: session.metadata.eventId,
+    //         clubName: session.metadata.clubName,
+    //         EventName: session.metadata.EventName,
+    //         userEmail: session.metadata.userEmail,
+    //         managerEmail: session.metadata.managerEmail,
+    //         location: session.metadata.location,
+    //         eventFee: session.metadata.eventFee,
+    //         status: session.metadata.status,
+    //         createdAt: new Date()
+    //       }
+    //     });
+    //   }
+
+    //   return res.send({ paymentStatus: "cancelled" });
+    // });
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
