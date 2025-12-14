@@ -54,6 +54,7 @@ async function run() {
     const userCollection = db.collection('users')
     const managerCollection = db.collection('manager')
     const joinCollection = db.collection('joinMember')
+    const eventClubCollection = db.collection('eventClub')
     const PaymentClubCollection = db.collection('paymentClub')
     // Send a ping to confirm a successful connection
     // middle admin before allowing admin activity
@@ -227,6 +228,17 @@ async function run() {
         }
       }
       const result = await managerCollection.updateOne(query, update);
+      res.send(result)
+    })
+
+    // Creat Event Api 
+
+    app.post('/eventClub',async(req,res)=>{
+      const event= req.body;
+      event.status=false,
+      event.createdAt= new Date()
+
+      const result = await eventClubCollection.insertOne(event)
       res.send(result)
     })
 
