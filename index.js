@@ -94,7 +94,7 @@ async function run() {
       const user = await userCollection.findOne(query);
       res.send({ role: user?.role || 'user' })
     })
-    app.patch('/users/:id/role', verifyFBToken,verifyAdmin, async (req, res) => {
+    app.patch('/users/:id/role', verifyFBToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const roleInfo = req.body;
       const query = { _id: new ObjectId(id) }
@@ -124,7 +124,7 @@ async function run() {
       if (req.query.status) {
         query.status = req.query.status
       }
-      const sort = { createdAt : -1 }
+      const sort = { createdAt: -1 }
       const cursor = managerCollection.find(query).sort(sort)
       const result = await cursor.toArray()
       res.send(result)
@@ -233,12 +233,25 @@ async function run() {
 
     // Creat Event Api 
 
-    app.post('/eventClub',async(req,res)=>{
-      const event= req.body;
-      event.status=false,
-      event.createdAt= new Date()
+    app.post('/creatEvent', async (req, res) => {
+      const event = req.body;
+      event.status = false,
+        event.createdAt = new Date()
 
       const result = await eventClubCollection.insertOne(event)
+      res.send(result)
+    })
+
+    app.get('/myCreatEvent', verifyFBToken, async (req, res) => {
+      const email = req.query.email
+      const query = {};
+      if (email) {
+        if (email !== req.decoded_email) {
+          return res.status(403).send({ message: 'forbidden access' });
+        }
+        query.managerEmail = email;
+      }
+      const result = await eventClubCollection.find(query).sort({ createdAt: -1 }).toArray()
       res.send(result)
     })
 
