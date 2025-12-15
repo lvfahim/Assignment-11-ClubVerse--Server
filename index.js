@@ -256,6 +256,12 @@ async function run() {
       const result = await eventClubCollection.findOne(query)
       res.send(result)
     })
+    app.get('/someEvent', async (req, res) => {
+      const sort = {eventFee:-1}
+      const cursor = eventClubCollection.find().limit(8).sort(sort)
+      const result = await cursor.toArray()
+      res.send(result)
+    })
     app.get('/allPaymentEvent', async (req, res) => {
       const sort = { paidAt: 1 }
       const curser = PaymentEventCollection.find().sort(sort);
