@@ -510,13 +510,27 @@ async function run() {
             clubName: session.metadata.clubName,
             EventName: session.metadata.EventName,
             transactionId: session.payment_intent,
+            location: session.metadata.location,
             paidAt: new Date(),
           };
+
+          const joinEvent = {
+            amount: session.amount_total / 100,
+            customerEmail: session.customer_details.email,
+            eventId: session.metadata.eventId,
+            clubName: session.metadata.clubName,
+            EventName: session.metadata.EventName,
+            transactionId: session.payment_intent,
+            location: session.metadata.location,
+            paidAt: new Date(),
+          }
           // Save the payment data to the main collection
           const resultPayment = await PaymentEventCollection.insertOne(paymentDoc);
+          const restltEvent = await joinEventCollection.insertOne(joinEvent)
           return res.send({
             success: true,
             paymentInfo: resultPayment,
+            joinEvent:restltEvent,
             transactionId: transactionId
           });
         }
