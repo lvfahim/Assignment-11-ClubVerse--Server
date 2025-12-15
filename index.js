@@ -256,6 +256,12 @@ async function run() {
       const result = await eventClubCollection.findOne(query)
       res.send(result)
     })
+    app.get('/allPaymentEvent', async (req, res) => {
+      const sort = { paidAt: 1 }
+      const curser = PaymentEventCollection.find().sort(sort);
+      const result = await curser.toArray();
+      res.send(result)
+    })
     app.get('/joinPaymentEvent', verifyFBToken, async (req, res) => {
       const email = req.query.email
       const query = {};
@@ -537,7 +543,7 @@ async function run() {
           return res.send({
             success: true,
             paymentInfo: resultPayment,
-            joinEvent:restltEvent,
+            joinEvent: restltEvent,
             transactionId: transactionId
           });
         }
