@@ -218,6 +218,13 @@ async function run() {
       res.send(result)
     })
 
+    app.get('/allPaymentClub', async (req, res) => {
+      const sort = { paidAt: 1 }
+      const curser = PaymentClubCollection.find().sort(sort);
+      const result = await curser.toArray();
+      res.send(result)
+    })
+
     app.patch('/joinCreatedClub/:id', verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const upDateClub = req.body;
