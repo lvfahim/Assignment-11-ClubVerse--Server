@@ -9,9 +9,12 @@ const port = process.env.PORT || 3000
 app.use(express.json());
 app.use(cors());
 
+// const serviceAccount = require("./clubverse.json");
+// const serviceAccount = require("./firebase-admin-key.json");
 
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
 
-const serviceAccount = require("./clubverse.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -49,7 +52,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     const db = client.db('ClubVerse')
     const userCollection = db.collection('users')
     const managerCollection = db.collection('manager')
@@ -565,32 +568,8 @@ async function run() {
         });
       }
     });
-    // app.post("/verify-payment-event", async (req, res) => {
-    //   const { sessionId } = req.body;
-
-    //   const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-    //   if (session.payment_status === "paid") {
-    //     return res.send({
-    //       paymentStatus: "paid",
-    //       joinInfo: {
-    //         eventId: session.metadata.eventId,
-    //         clubName: session.metadata.clubName,
-    //         EventName: session.metadata.EventName,
-    //         userEmail: session.metadata.userEmail,
-    //         managerEmail: session.metadata.managerEmail,
-    //         location: session.metadata.location,
-    //         eventFee: session.metadata.eventFee,
-    //         status: session.metadata.status,
-    //         createdAt: new Date()
-    //       }
-    //     });
-    //   }
-
-    //   return res.send({ paymentStatus: "cancelled" });
-    // });
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
